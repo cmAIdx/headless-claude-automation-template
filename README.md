@@ -124,7 +124,7 @@ The human stays in the approval seat, not the execution seat.
 
 ## Quick start
 
-See [SETUP.md](SETUP.md) for the full 9-step setup guide. The short version:
+See [SETUP.md](SETUP.md) for the full 9-step setup guide. See [docs/reference.md](docs/reference.md) for the complete technical reference (tool permission layers, hook execution model, agent lifecycle, cost/limits, failure modes). The short version:
 
 1. Use this template to create a new repo (or copy the files into an existing one)
 2. Add `ANTHROPIC_API_KEY` and `LINEAR_API_KEY` to GitHub repo secrets
@@ -145,6 +145,9 @@ See [SETUP.md](SETUP.md) for the full 9-step setup guide. The short version:
 | `.claude/settings.json` | Add project-specific hooks (data isolation, lint, etc.) |
 
 ## Links
+
+### Template reference
+- [docs/reference.md](docs/reference.md) -- complete technical reference for this template (hooks, permissions, agent lifecycle, costs, failure modes)
 
 ### Core tools
 - [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action) -- the GitHub Action that runs Claude Code headless in CI
