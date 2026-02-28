@@ -15,7 +15,7 @@ If you used this as a GitHub template, you're already done with the file structu
 
 ```
 .github/           # Workflows, issue templates
-.claude/           # Hooks, commands, skills, agents, settings
+.claude/           # Hooks, commands, agents, settings
 .mcp.json          # Linear MCP config
 CLAUDE.md          # Project instructions (fill this in!)
 docs/requirements/ # Where requirements docs live
@@ -69,13 +69,7 @@ Edit `.github/workflows/claude-review.yml` and replace the TODO comments with yo
 - Compliance requirements
 - Critical paths requiring human review
 
-## Step 7: Customize Skills
-
-Fill in the TODO sections in:
-- `.claude/skills/testing-patterns/SKILL.md` -- your test framework, helpers, coverage rules
-- `.claude/skills/api-conventions/SKILL.md` -- your API response format, auth pattern
-
-## Step 8: Branch Protection (Recommended)
+## Step 7: Branch Protection (Recommended)
 
 Configure GitHub branch protection on `main`:
 
@@ -85,11 +79,11 @@ Configure GitHub branch protection on `main`:
 4. Enable **Require status checks to pass** -- add: `claude-review`
 5. (Optional) **Dismiss stale approvals when new commits are pushed**
 
-## Step 9: CodeRabbit (Optional)
+## Step 8: CodeRabbit (Optional)
 
 Install [CodeRabbit](https://coderabbit.ai) on your GitHub repo for automated code review with 40+ linters and security scanning. The review workflow is configured to accept CodeRabbit's comments (`allowed_bots: "coderabbitai,claude"`).
 
-## Step 10: Global Settings (Per Machine)
+## Step 9: Global Settings (Per Machine)
 
 These are user-level settings, not per-project. Set them once on each machine:
 
@@ -109,21 +103,6 @@ These are user-level settings, not per-project. Set them once on each machine:
     ]
   }
 }
-```
-
-### `~/.claude/CLAUDE.md`
-```markdown
-# Global Conventions
-
-## Code Quality
-- No speculation -- verify before claiming
-- No premature abstraction -- three similar lines is better than a premature helper
-- Replace, don't deprecate -- if something is unused, delete it completely
-
-## Workflow
-- Commit early and often on feature branches
-- Never force-push to shared branches
-- Run tests before claiming work is complete
 ```
 
 ### GitHub MCP Server
@@ -170,17 +149,12 @@ Linear issues auto-close with status "Done"
     story.yml             # Structured issue template for dev agents
 
 .claude/
-  settings.json           # Hooks (branch protection, destructive blocker, auto-lint) + permissions
+  settings.json           # Hooks (branch protection, destructive blocker) + permissions
   hooks/
     block-destructive.sh  # Blocks dangerous commands (see script for full pattern list)
   commands/
     pipeline.md           # /pipeline -- requirements -> Linear -> agents
     review.md             # /review -- 3-iteration QC review
-    test.md               # /test -- auto-detect and run tests
-  skills/
-    subagent-strategy/    # Parallel vs sequential agent patterns
-    testing-patterns/     # Test framework conventions (fill in)
-    api-conventions/      # API response patterns (fill in)
   agents/
     security-reviewer.md  # Security review subagent
 

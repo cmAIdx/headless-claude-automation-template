@@ -21,23 +21,16 @@
           }
         ]
       }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "FILE=$(cat | jq -r '.tool_input.file_path // .tool_response.filePath') && [[ \"$FILE\" == *.ts || \"$FILE\" == *.tsx ]] && npx eslint --fix \"$FILE\" 2>/dev/null || true",
-            "timeout": 30,
-            "async": true
-          }
-        ]
-      }
     ]
   },
   "permissions": {
-    "allow": ["Read", "Glob", "Grep", "WebFetch", "WebSearch"],
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch"
+    ],
     "deny": [
       "Edit(.env)",
       "Edit(.env.local)",
