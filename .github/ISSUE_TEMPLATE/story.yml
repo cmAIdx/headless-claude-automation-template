@@ -55,9 +55,9 @@ body:
     attributes:
       label: Priority
       options:
-        - P0 — Critical
-        - P1 — High
-        - P2 — Medium
+        - P0 -- Critical
+        - P1 -- High
+        - P2 -- Medium
     validations:
       required: true
 
