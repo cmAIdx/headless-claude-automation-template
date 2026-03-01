@@ -157,7 +157,7 @@ jobs:
           label_trigger: "agent:ready"
           assignee_trigger: "claude"
           # TODO: Adjust --max-turns and --allowedTools for your project
-          claude_args: '--max-turns 40 --allowedTools "Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(tsc:*),Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(cp:*),Bash(mv:*),Bash(chmod:*),Bash(git:*),Bash(gh:*)"'
+          claude_args: '--max-turns 40 --allowedTools "Edit,Write,Read,MultiEdit,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(tsc:*),Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(cp:*),Bash(mv:*),Bash(chmod:*),Bash(git:*),Bash(gh:*)"'
           prompt: |
             You are a dev agent working on a GitHub issue. Read the issue carefully and implement the requested changes.
 
