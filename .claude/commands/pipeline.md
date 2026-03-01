@@ -54,11 +54,49 @@ If the user provided a second argument (a git URL), import the starter codebase 
 
 After this step, continue with the normal pipeline flow. The starter code is now in the repo and will be referenced when creating stories.
 
-### 1. Discover Linear Workspace
+### 1. Discover & Verify Linear Workspace
 
-Use the Linear MCP tools to get workspace context:
+Use the Linear MCP tools to get workspace context and verify all prerequisites for the automation pipeline.
+
+**1a. Team Discovery**
 - `list_teams` - find the target team (ask user if multiple teams exist)
-- `list_issue_labels` - find existing labels, note which ones to create
+
+**1b. Verify Workflow States (CRITICAL)**
+Use `list_issue_statuses` for the target team and verify these required states exist:
+
+| Required State | Type | Used By |
+|---------------|------|---------|
+| In Progress | started | claude-dev.yml moves issue here when agent starts |
+| In Review | started | linear-sync.yml moves issue here when PR opens |
+| Done | completed | linear-sync.yml moves issue here when PR merges |
+
+If any required state is missing, **STOP and tell the user**:
+> "Linear team '{team}' is missing the '{state}' workflow state. Add it in Linear Settings > Teams > {team} > Workflow before continuing. The automation pipeline requires these states to track progress: In Progress, In Review, Done."
+
+Do not proceed until all three states are confirmed.
+
+**1c. Verify & Create Labels**
+Use `list_issue_labels` for the team. Check for these required labels and create any that are missing using `create_issue_label`:
+
+| Label | Color | Purpose |
+|-------|-------|---------|
+| `story` | `#4EA7FC` | Identifies agent-implementable stories |
+| `agent:ready` | `#0E8A16` | Triggers dev agent workflow in GitHub Actions |
+| `priority:p0` | `#D73A49` | Critical priority |
+| `priority:p1` | `#E36209` | High priority |
+| `priority:p2` | `#FBCA04` | Medium priority |
+
+**1d. Verify GitHub Labels**
+Run `gh label list` and verify the same labels exist in GitHub. Create any missing ones:
+```bash
+gh label create "story" --color "4EA7FC" --description "Agent-implementable story" 2>/dev/null || true
+gh label create "agent:ready" --color "0E8A16" --description "Ready for dev agent" 2>/dev/null || true
+gh label create "priority:p0" --color "D73A49" --description "Critical" 2>/dev/null || true
+gh label create "priority:p1" --color "E36209" --description "High" 2>/dev/null || true
+gh label create "priority:p2" --color "FBCA04" --description "Medium" 2>/dev/null || true
+```
+
+**1e. Check Existing Projects**
 - `list_projects` - check for existing related projects
 
 ### 2. Analyze Requirements
@@ -173,4 +211,5 @@ And remind the user:
 - Dev agents trigger on `agent:ready` label
 - CodeRabbit + Claude review run on each PR
 - PRs on critical paths need manual approval
-- Track progress in Linear - status updates sync back from GitHub
+- Linear status updates are automatic: Todo → In Progress → In Review → Done
+- Track progress in both Linear (status) and GitHub (issue checkboxes + PR task lists)
