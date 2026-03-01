@@ -71,7 +71,7 @@ jobs:
 
       - name: Run Claude Code Auto-Fix
         if: steps.iteration.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@8cfb50531602989156055238cb98cca2db5d6bfd # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: "--max-turns 15"

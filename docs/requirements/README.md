@@ -23,3 +23,5 @@ Requirements docs are plain markdown. No special format required, but include:
 - **Constraints** (performance, security, compatibility)
 
 The `/pipeline` command will analyze the doc and break it into agent-sized stories automatically.
+
+See [example.md](example.md) for a sample requirements doc.

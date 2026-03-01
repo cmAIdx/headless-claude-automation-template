@@ -31,7 +31,7 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
         run: |
-          RESPONSE=$(curl -s -X POST https://api.linear.app/graphql \
+          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d '{"query": "{ teams { nodes { id name key } } }"}')
@@ -61,7 +61,7 @@ jobs:
               query: "mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }",
               variables: { input: { teamId: $teamId, title: $title, description: $desc, priority: 3 } }
             }')
-          RESPONSE=$(curl -s -X POST https://api.linear.app/graphql \
+          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$REQUEST_BODY")
@@ -111,7 +111,7 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
         run: |
-          RESPONSE=$(curl -s -X POST https://api.linear.app/graphql \
+          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d '{"query": "{ workflowStates { nodes { id name type } } }"}')
@@ -131,7 +131,7 @@ jobs:
               query: "query($filter: IssueFilter) { issues(filter: $filter) { nodes { id identifier } } }",
               variables: { filter: { number: { eq: $num } } }
             }')
-          RESPONSE=$(curl -s -X POST https://api.linear.app/graphql \
+          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$SEARCH_BODY")
@@ -144,7 +144,7 @@ jobs:
                 query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
                 variables: { id: $id, input: { stateId: $stateId } }
               }')
-            curl -s -X POST https://api.linear.app/graphql \
+            curl -s --max-time 10 -X POST https://api.linear.app/graphql \
               -H "Authorization: $LINEAR_API_KEY" \
               -H "Content-Type: application/json" \
               -d "$UPDATE_BODY"
