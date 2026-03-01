@@ -8,6 +8,9 @@ jobs:
   pr-opened:
     if: github.event.action == 'opened'
     runs-on: ubuntu-latest
+    concurrency:
+      group: linear-sync-open-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     permissions:
       pull-requests: write
       issues: read
@@ -30,18 +33,61 @@ jobs:
         id: team
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+          warn_pr() {
+            echo "::warning::$1"
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "$(cat <<WARN_EOF
+          **Linear Sync Warning**: $1
+
+          **Action needed**: $2
+          See [workflow logs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for details.
+          WARN_EOF
+          )" 2>/dev/null || true
+          }
+
+          if [ -z "$LINEAR_API_KEY" ]; then
+            warn_pr "LINEAR_API_KEY secret is not set." "Add it in GitHub repo Settings > Secrets and variables > Actions."
+            echo "id=" >> $GITHUB_OUTPUT
+            echo "key=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          RESPONSE=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"query": "{ teams { nodes { id name key } } }"}')
-          TEAM_ID=$(echo "$RESPONSE" | jq -r '.data.teams.nodes[0].id')
-          TEAM_KEY=$(echo "$RESPONSE" | jq -r '.data.teams.nodes[0].key')
+            -d '{"query": "{ teams { nodes { id name key } } }"}' 2>&1) || {
+            warn_pr "Failed to connect to Linear API (network error or timeout)." "Check network connectivity and retry by re-opening the PR."
+            echo "id=" >> $GITHUB_OUTPUT
+            echo "key=" >> $GITHUB_OUTPUT
+            exit 0
+          }
+
+          GQL_ERROR=$(echo "$RESPONSE" | jq -r '.errors[0].message // empty' 2>/dev/null)
+          if [ -n "$GQL_ERROR" ]; then
+            warn_pr "Linear API error: $GQL_ERROR" "Verify LINEAR_API_KEY is valid and not expired."
+            echo "id=" >> $GITHUB_OUTPUT
+            echo "key=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          TEAM_ID=$(echo "$RESPONSE" | jq -r '.data.teams.nodes[0].id // empty' 2>/dev/null)
+          TEAM_KEY=$(echo "$RESPONSE" | jq -r '.data.teams.nodes[0].key // empty' 2>/dev/null)
+          if [ -z "$TEAM_ID" ]; then
+            warn_pr "No teams found in Linear workspace." "Create a team in Linear or check that LINEAR_API_KEY has access to at least one team."
+            echo "id=" >> $GITHUB_OUTPUT
+            echo "key=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "id=$TEAM_ID" >> $GITHUB_OUTPUT
           echo "key=$TEAM_KEY" >> $GITHUB_OUTPUT
+          echo "Found Linear team: $TEAM_KEY ($TEAM_ID)"
 
       - name: Create Linear issue for PR
-        if: steps.check.outputs.found == 'false'
+        if: steps.check.outputs.found == 'false' && steps.team.outputs.id != ''
         id: create
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
@@ -49,6 +95,8 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           DESC=$(echo "$PR_BODY" | head -50)
           REQUEST_BODY=$(jq -n \
@@ -61,21 +109,41 @@ jobs:
               query: "mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }",
               variables: { input: { teamId: $teamId, title: $title, description: $desc, priority: 3 } }
             }')
-          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+
+          RESPONSE=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$REQUEST_BODY")
-          ERRORS=$(echo "$RESPONSE" | jq -r '.errors // empty')
-          if [ -n "$ERRORS" ]; then
-            echo "::error::Linear API error: $(echo "$RESPONSE" | jq -c '.errors')"
+            -d "$REQUEST_BODY" 2>&1) || {
+            echo "::warning::Failed to connect to Linear API when creating issue."
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "**Linear Sync Warning**: Failed to create Linear issue (network error). A Linear issue was not created for this PR. You can create one manually in Linear and reference it in the PR body." 2>/dev/null || true
+            echo "id=" >> $GITHUB_OUTPUT
+            echo "url=" >> $GITHUB_OUTPUT
+            exit 0
+          }
+
+          GQL_ERROR=$(echo "$RESPONSE" | jq -r '.errors[0].message // empty' 2>/dev/null)
+          if [ -n "$GQL_ERROR" ]; then
+            echo "::warning::Linear API error creating issue: $GQL_ERROR"
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "**Linear Sync Warning**: Failed to create Linear issue: $GQL_ERROR. You can create one manually in Linear." 2>/dev/null || true
             echo "id=" >> $GITHUB_OUTPUT
             echo "url=" >> $GITHUB_OUTPUT
             exit 0
           fi
-          ISSUE_ID=$(echo "$RESPONSE" | jq -r '.data.issueCreate.issue.identifier // empty')
-          ISSUE_URL=$(echo "$RESPONSE" | jq -r '.data.issueCreate.issue.url // empty')
+
+          ISSUE_ID=$(echo "$RESPONSE" | jq -r '.data.issueCreate.issue.identifier // empty' 2>/dev/null)
+          ISSUE_URL=$(echo "$RESPONSE" | jq -r '.data.issueCreate.issue.url // empty' 2>/dev/null)
+          if [ -z "$ISSUE_ID" ]; then
+            echo "::warning::Linear issue creation returned unexpected response - issue may not have been created."
+            echo "id=" >> $GITHUB_OUTPUT
+            echo "url=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "id=$ISSUE_ID" >> $GITHUB_OUTPUT
           echo "url=$ISSUE_URL" >> $GITHUB_OUTPUT
+          echo "Created Linear issue: $ISSUE_ID"
 
       - name: Comment on PR with Linear link
         if: steps.check.outputs.found == 'false' && steps.create.outputs.id != '' && steps.create.outputs.id != 'null'
@@ -93,43 +161,95 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           LINEAR_REF: ${{ steps.check.outputs.ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          warn_pr() {
+            echo "::warning::$1"
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "$(cat <<WARN_EOF
+          **Linear Sync Warning**: $1
+
+          **Action needed**: $2
+          See [workflow logs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for details.
+          WARN_EOF
+          )" 2>/dev/null || true
+          }
+
+          if [ -z "$LINEAR_API_KEY" ]; then
+            warn_pr "LINEAR_API_KEY not set. Cannot move issue to In Review." "Add LINEAR_API_KEY in GitHub repo Settings > Secrets."
+            exit 0
+          fi
+
           ISSUE_NUM=$(echo "$LINEAR_REF" | grep -oP '\d+')
-          SEARCH=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+          SEARCH=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --argjson num "$ISSUE_NUM" '{
               query: "query($filter: IssueFilter) { issues(filter: $filter) { nodes { id identifier team { id } } } }",
               variables: { filter: { number: { eq: $num } } }
-            }')")
-          ISSUE_UUID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].id // empty')
-          TEAM_ID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].team.id // empty')
-          if [ -z "$ISSUE_UUID" ]; then
-            echo "::warning::Could not find Linear issue for $LINEAR_REF"
+            }')" 2>&1) || {
+            warn_pr "Failed to connect to Linear API." "Check network and LINEAR_API_KEY, then manually move $LINEAR_REF to In Review in Linear."
+            exit 0
+          }
+
+          GQL_ERROR=$(echo "$SEARCH" | jq -r '.errors[0].message // empty' 2>/dev/null)
+          if [ -n "$GQL_ERROR" ]; then
+            warn_pr "Linear API error: $GQL_ERROR" "Verify LINEAR_API_KEY is valid. Manually move $LINEAR_REF to In Review."
             exit 0
           fi
-          STATES=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+
+          ISSUE_UUID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].id // empty' 2>/dev/null)
+          TEAM_ID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].team.id // empty' 2>/dev/null)
+          if [ -z "$ISSUE_UUID" ]; then
+            echo "::notice::No Linear issue found matching $LINEAR_REF - skipping In Review transition."
+            exit 0
+          fi
+
+          STATES=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg teamId "$TEAM_ID" '{
               query: "query($teamId: String!) { team(id: $teamId) { states { nodes { id name type } } } }",
               variables: { teamId: $teamId }
-            }')")
-          IN_REVIEW_ID=$(echo "$STATES" | jq -r '.data.team.states.nodes[] | select(.name == "In Review") | .id')
-          if [ -n "$IN_REVIEW_ID" ]; then
-            curl -s --max-time 10 -X POST https://api.linear.app/graphql \
-              -H "Authorization: $LINEAR_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d "$(jq -n --arg id "$ISSUE_UUID" --arg stateId "$IN_REVIEW_ID" '{
-                query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
-                variables: { id: $id, input: { stateId: $stateId } }
-              }')" > /dev/null
+            }')" 2>&1) || {
+            warn_pr "Failed to fetch workflow states from Linear." "Manually move $LINEAR_REF to In Review in Linear."
+            exit 0
+          }
+
+          IN_REVIEW_ID=$(echo "$STATES" | jq -r '.data.team.states.nodes[] | select(.name == "In Review") | .id' 2>/dev/null)
+          if [ -z "$IN_REVIEW_ID" ]; then
+            warn_pr "Linear team is missing the **In Review** workflow state." "Add 'In Review' in Linear Settings > Teams > Workflow, then manually move $LINEAR_REF."
+            exit 0
+          fi
+
+          UPDATE=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg id "$ISSUE_UUID" --arg stateId "$IN_REVIEW_ID" '{
+              query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
+              variables: { id: $id, input: { stateId: $stateId } }
+            }')" 2>&1) || {
+            warn_pr "Failed to update Linear issue status." "Manually move $LINEAR_REF to In Review in Linear."
+            exit 0
+          }
+
+          SUCCESS=$(echo "$UPDATE" | jq -r '.data.issueUpdate.success // false' 2>/dev/null)
+          if [ "$SUCCESS" = "true" ]; then
             echo "Moved $LINEAR_REF to In Review"
+          else
+            UPD_ERROR=$(echo "$UPDATE" | jq -r '.errors[0].message // "unknown error"' 2>/dev/null)
+            warn_pr "Failed to move $LINEAR_REF to In Review: $UPD_ERROR" "Manually move it in Linear."
           fi
 
   pr-merged:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    concurrency:
+      group: linear-sync-merge-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      pull-requests: write
     steps:
       - name: Extract Linear issue reference
         id: extract
@@ -149,12 +269,51 @@ jobs:
         id: states
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LINEAR_REF: ${{ steps.extract.outputs.ref }}
         run: |
-          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+          warn_pr() {
+            echo "::warning::$1"
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "$(cat <<WARN_EOF
+          **Linear Sync Warning**: $1
+
+          **Action needed**: $2
+          See [workflow logs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for details.
+          WARN_EOF
+          )" 2>/dev/null || true
+          }
+
+          if [ -z "$LINEAR_API_KEY" ]; then
+            warn_pr "LINEAR_API_KEY not set. Cannot move $LINEAR_REF to Done." "Add LINEAR_API_KEY in GitHub repo Settings > Secrets, then manually move $LINEAR_REF to Done in Linear."
+            echo "done_id=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          RESPONSE=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"query": "{ workflowStates { nodes { id name type } } }"}')
-          DONE_STATE=$(echo "$RESPONSE" | jq -r '.data.workflowStates.nodes[] | select(.type == "completed") | .id' | head -1)
+            -d '{"query": "{ workflowStates { nodes { id name type } } }"}' 2>&1) || {
+            warn_pr "Failed to connect to Linear API." "Manually move $LINEAR_REF to Done in Linear."
+            echo "done_id=" >> $GITHUB_OUTPUT
+            exit 0
+          }
+
+          GQL_ERROR=$(echo "$RESPONSE" | jq -r '.errors[0].message // empty' 2>/dev/null)
+          if [ -n "$GQL_ERROR" ]; then
+            warn_pr "Linear API error: $GQL_ERROR" "Verify LINEAR_API_KEY. Manually move $LINEAR_REF to Done."
+            echo "done_id=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          DONE_STATE=$(echo "$RESPONSE" | jq -r '.data.workflowStates.nodes[] | select(.type == "completed") | .id' 2>/dev/null | head -1)
+          if [ -z "$DONE_STATE" ]; then
+            warn_pr "No completed-type workflow state found in Linear." "Add a 'Done' state (type: completed) in Linear Settings > Teams > Workflow, then manually move $LINEAR_REF."
+            echo "done_id=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "done_id=$DONE_STATE" >> $GITHUB_OUTPUT
 
       - name: Resolve Linear issue
@@ -163,31 +322,62 @@ jobs:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           LINEAR_REF: ${{ steps.extract.outputs.ref }}
           DONE_STATE: ${{ steps.states.outputs.done_id }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          warn_pr() {
+            echo "::warning::$1"
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "$(cat <<WARN_EOF
+          **Linear Sync Warning**: $1
+
+          **Action needed**: $2
+          See [workflow logs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) for details.
+          WARN_EOF
+          )" 2>/dev/null || true
+          }
+
           ISSUE_NUM=$(echo "$LINEAR_REF" | grep -oP '\d+')
           SEARCH_BODY=$(jq -n --argjson num "$ISSUE_NUM" \
             '{
               query: "query($filter: IssueFilter) { issues(filter: $filter) { nodes { id identifier } } }",
               variables: { filter: { number: { eq: $num } } }
             }')
-          RESPONSE=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+
+          RESPONSE=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$SEARCH_BODY")
-          ISSUE_UUID=$(echo "$RESPONSE" | jq -r '.data.issues.nodes[0].id // empty')
-          if [ -n "$ISSUE_UUID" ]; then
-            UPDATE_BODY=$(jq -n \
-              --arg id "$ISSUE_UUID" \
-              --arg stateId "$DONE_STATE" \
-              '{
-                query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
-                variables: { id: $id, input: { stateId: $stateId } }
-              }')
-            curl -s --max-time 10 -X POST https://api.linear.app/graphql \
-              -H "Authorization: $LINEAR_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d "$UPDATE_BODY"
+            -d "$SEARCH_BODY" 2>&1) || {
+            warn_pr "Failed to connect to Linear API when resolving issue." "Manually move $LINEAR_REF to Done in Linear."
+            exit 0
+          }
+
+          ISSUE_UUID=$(echo "$RESPONSE" | jq -r '.data.issues.nodes[0].id // empty' 2>/dev/null)
+          if [ -z "$ISSUE_UUID" ]; then
+            echo "::notice::No Linear issue found matching $LINEAR_REF - skipping Done transition."
+            exit 0
+          fi
+
+          UPDATE_BODY=$(jq -n \
+            --arg id "$ISSUE_UUID" \
+            --arg stateId "$DONE_STATE" \
+            '{
+              query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
+              variables: { id: $id, input: { stateId: $stateId } }
+            }')
+
+          UPDATE=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$UPDATE_BODY" 2>&1) || {
+            warn_pr "Failed to update Linear issue status." "Manually move $LINEAR_REF to Done in Linear."
+            exit 0
+          }
+
+          SUCCESS=$(echo "$UPDATE" | jq -r '.data.issueUpdate.success // false' 2>/dev/null)
+          if [ "$SUCCESS" = "true" ]; then
             echo "Moved $LINEAR_REF to Done"
           else
-            echo "::warning::Could not find Linear issue for $LINEAR_REF"
+            UPD_ERROR=$(echo "$UPDATE" | jq -r '.errors[0].message // "unknown error"' 2>/dev/null)
+            warn_pr "Failed to move $LINEAR_REF to Done: $UPD_ERROR" "Manually move it to Done in Linear."
           fi

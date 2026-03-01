@@ -20,6 +20,9 @@ jobs:
        contains(github.event.comment.body, '@claude') &&
        !github.event.issue.pull_request)
     runs-on: ubuntu-latest
+    concurrency:
+      group: dev-agent-${{ github.event.issue.number }}
+      cancel-in-progress: true
     permissions:
       contents: write
       pull-requests: write
@@ -42,40 +45,91 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           LINEAR_REF: ${{ steps.linear.outputs.ref }}
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
+          # Post a warning on the GitHub issue so the user sees it
+          warn_issue() {
+            echo "::warning::$1"
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "$(cat <<WARN_EOF
+          **Linear Sync Warning**: $1
+
+          The dev agent will continue working, but Linear status may be out of sync.
+          **Action needed**: Check the [workflow logs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) and verify your \`LINEAR_API_KEY\` secret is valid and not expired.
+          WARN_EOF
+          )" 2>/dev/null || true
+          }
+
+          if [ -z "$LINEAR_API_KEY" ]; then
+            warn_issue "LINEAR_API_KEY secret is not set. Cannot update Linear issue status. Add it in GitHub repo Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+
           ISSUE_NUM=$(echo "$LINEAR_REF" | grep -oP '\d+')
-          # Find the issue UUID
-          SEARCH=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+
+          # Find the issue UUID and team
+          SEARCH=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --argjson num "$ISSUE_NUM" '{
               query: "query($filter: IssueFilter) { issues(filter: $filter) { nodes { id identifier team { id } } } }",
               variables: { filter: { number: { eq: $num } } }
-            }')")
-          ISSUE_UUID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].id // empty')
-          TEAM_ID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].team.id // empty')
-          if [ -z "$ISSUE_UUID" ]; then
-            echo "::warning::Could not find Linear issue for $LINEAR_REF"
+            }')" 2>&1) || {
+            warn_issue "Failed to connect to Linear API (network error or timeout). Will retry on next trigger."
+            exit 0
+          }
+
+          # Check for auth/API errors
+          GQL_ERROR=$(echo "$SEARCH" | jq -r '.errors[0].message // empty' 2>/dev/null)
+          if [ -n "$GQL_ERROR" ]; then
+            warn_issue "Linear API error: $GQL_ERROR"
             exit 0
           fi
+
+          ISSUE_UUID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].id // empty' 2>/dev/null)
+          TEAM_ID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].team.id // empty' 2>/dev/null)
+          if [ -z "$ISSUE_UUID" ]; then
+            echo "::notice::No Linear issue found matching $LINEAR_REF - skipping status update."
+            exit 0
+          fi
+
           # Find "In Progress" state for this team
-          STATES=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+          STATES=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg teamId "$TEAM_ID" '{
               query: "query($teamId: String!) { team(id: $teamId) { states { nodes { id name type } } } }",
               variables: { teamId: $teamId }
-            }')")
-          IN_PROGRESS_ID=$(echo "$STATES" | jq -r '.data.team.states.nodes[] | select(.name == "In Progress") | .id')
-          if [ -n "$IN_PROGRESS_ID" ]; then
-            curl -s --max-time 10 -X POST https://api.linear.app/graphql \
-              -H "Authorization: $LINEAR_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d "$(jq -n --arg id "$ISSUE_UUID" --arg stateId "$IN_PROGRESS_ID" '{
-                query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
-                variables: { id: $id, input: { stateId: $stateId } }
-              }')" > /dev/null
+            }')" 2>&1) || {
+            warn_issue "Failed to fetch workflow states from Linear."
+            exit 0
+          }
+
+          IN_PROGRESS_ID=$(echo "$STATES" | jq -r '.data.team.states.nodes[] | select(.name == "In Progress") | .id' 2>/dev/null)
+          if [ -z "$IN_PROGRESS_ID" ]; then
+            warn_issue "Linear team is missing the **In Progress** workflow state. Add it in Linear Settings > Teams > Workflow. Without it, issues won't be tracked as in-progress."
+            exit 0
+          fi
+
+          # Move issue to In Progress and validate the response
+          UPDATE=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg id "$ISSUE_UUID" --arg stateId "$IN_PROGRESS_ID" '{
+              query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
+              variables: { id: $id, input: { stateId: $stateId } }
+            }')" 2>&1) || {
+            warn_issue "Failed to update Linear issue (network error)."
+            exit 0
+          }
+
+          SUCCESS=$(echo "$UPDATE" | jq -r '.data.issueUpdate.success // false' 2>/dev/null)
+          if [ "$SUCCESS" = "true" ]; then
             echo "Moved $LINEAR_REF to In Progress"
+          else
+            UPD_ERROR=$(echo "$UPDATE" | jq -r '.errors[0].message // "unknown error"' 2>/dev/null)
+            warn_issue "Failed to move $LINEAR_REF to In Progress: $UPD_ERROR"
           fi
 
       - name: Checkout
