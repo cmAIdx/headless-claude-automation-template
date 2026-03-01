@@ -37,6 +37,47 @@ jobs:
           echo "ref=$LINEAR_REF" >> $GITHUB_OUTPUT
           echo "url=$LINEAR_URL" >> $GITHUB_OUTPUT
 
+      - name: Move Linear issue to In Progress
+        if: steps.linear.outputs.ref != ''
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_REF: ${{ steps.linear.outputs.ref }}
+        run: |
+          ISSUE_NUM=$(echo "$LINEAR_REF" | grep -oP '\d+')
+          # Find the issue UUID
+          SEARCH=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --argjson num "$ISSUE_NUM" '{
+              query: "query($filter: IssueFilter) { issues(filter: $filter) { nodes { id identifier team { id } } } }",
+              variables: { filter: { number: { eq: $num } } }
+            }')")
+          ISSUE_UUID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].id // empty')
+          TEAM_ID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].team.id // empty')
+          if [ -z "$ISSUE_UUID" ]; then
+            echo "::warning::Could not find Linear issue for $LINEAR_REF"
+            exit 0
+          fi
+          # Find "In Progress" state for this team
+          STATES=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg teamId "$TEAM_ID" '{
+              query: "query($teamId: String!) { team(id: $teamId) { states { nodes { id name type } } } }",
+              variables: { teamId: $teamId }
+            }')")
+          IN_PROGRESS_ID=$(echo "$STATES" | jq -r '.data.team.states.nodes[] | select(.name == "In Progress") | .id')
+          if [ -n "$IN_PROGRESS_ID" ]; then
+            curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+              -H "Authorization: $LINEAR_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg id "$ISSUE_UUID" --arg stateId "$IN_PROGRESS_ID" '{
+                query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
+                variables: { id: $id, input: { stateId: $stateId } }
+              }')" > /dev/null
+            echo "Moved $LINEAR_REF to In Progress"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -98,11 +139,13 @@ jobs:
 
             ## Progress Tracking (CRITICAL)
 
-            The GitHub issue body contains checkboxes. You MUST update these checkboxes **in real time as you complete each item** - not in a batch at the end.
+            You MUST keep both GitHub and Linear updated as you work:
 
-            **How**: After completing each requirement, run `gh issue view ${{ github.event.issue.number }} --json body -q .body` to get the current body, check off the items (`- [ ]` to `- [x]`), then update with `gh issue edit ${{ github.event.issue.number }} --body "<full updated body>"`.
-
+            **GitHub Issue checkboxes**: Update in real time as you complete each item - not in a batch at the end.
+            Run `gh issue view ${{ github.event.issue.number }} --json body -q .body` to get the current body, check off items (`- [ ]` to `- [x]`), then update with `gh issue edit ${{ github.event.issue.number }} --body "<full updated body>"`.
             Aim for 3-5 progress updates over the course of the run.
+
+            **PR task list**: After creating the PR, include a checklist in the PR body showing completed and remaining items. Update it before pushing final changes.
 
             ## Rules
 
