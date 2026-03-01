@@ -181,6 +181,7 @@ jobs:
             6. **Create PR**: Push your branch and create a pull request:
                ```
                gh pr create --title "<short title>" --body "Closes #${{ github.event.issue.number }}
+               Linear: ${{ env.LINEAR_ISSUE_REF }} ${{ env.LINEAR_ISSUE_URL }}
 
                ## Summary
                <what changed and why>
@@ -209,7 +210,8 @@ jobs:
             - Explore the codebase BEFORE implementing. Match existing patterns, naming, and style.
             - Reuse existing utilities and components. Search before creating anything new.
             - Follow project rules in CLAUDE.md
-            - Use GitHub issue number #${{ github.event.issue.number }} in the PR body (NOT Linear IDs)
+            - Use GitHub issue number #${{ github.event.issue.number }} in the PR body for auto-close
+            - Include the Linear reference and URL in the PR body (from Context below) for traceability
             - Use the Write tool to create new files (auto-creates directories)
             - Update issue checkboxes incrementally as you work
             - Do not introduce tech debt or leave TODO/FIXME comments

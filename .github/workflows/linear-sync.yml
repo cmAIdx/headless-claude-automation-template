@@ -164,6 +164,8 @@ jobs:
           LINEAR_REF: ${{ steps.check.outputs.ref }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           warn_pr() {
             echo "::warning::$1"
@@ -240,6 +242,16 @@ jobs:
           SUCCESS=$(echo "$UPDATE" | jq -r '.data.issueUpdate.success // false' 2>/dev/null)
           if [ "$SUCCESS" = "true" ]; then
             echo "Moved $LINEAR_REF to In Review"
+
+            # Add PR link as a comment on the Linear issue
+            COMMENT_BODY="PR opened: [$PR_TITLE]($PR_URL)"
+            curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
+              -H "Authorization: $LINEAR_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg issueId "$ISSUE_UUID" --arg body "$COMMENT_BODY" '{
+                query: "mutation($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { success } }",
+                variables: { issueId: $issueId, body: $body }
+              }')" > /dev/null || echo "::warning::Failed to add PR link comment to Linear issue (non-critical)"
           else
             UPD_ERROR=$(echo "$UPDATE" | jq -r '.errors[0].message // "unknown error"' 2>/dev/null)
             echo "::error::Failed to move $LINEAR_REF to In Review: $UPD_ERROR"
@@ -365,6 +377,8 @@ jobs:
           ISSUE_UUID: ${{ steps.states.outputs.issue_uuid }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           warn_pr() {
             echo "::warning::$1"
@@ -397,6 +411,16 @@ jobs:
           SUCCESS=$(echo "$UPDATE" | jq -r '.data.issueUpdate.success // false' 2>/dev/null)
           if [ "$SUCCESS" = "true" ]; then
             echo "Moved $LINEAR_REF to Done"
+
+            # Add merged PR link as a comment on the Linear issue
+            COMMENT_BODY="PR merged: [$PR_TITLE]($PR_URL)"
+            curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
+              -H "Authorization: $LINEAR_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg issueId "$ISSUE_UUID" --arg body "$COMMENT_BODY" '{
+                query: "mutation($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { success } }",
+                variables: { issueId: $issueId, body: $body }
+              }')" > /dev/null || echo "::warning::Failed to add PR link comment to Linear issue (non-critical)"
           else
             UPD_ERROR=$(echo "$UPDATE" | jq -r '.errors[0].message // "unknown error"' 2>/dev/null)
             echo "::error::Failed to move $LINEAR_REF to Done: $UPD_ERROR"
