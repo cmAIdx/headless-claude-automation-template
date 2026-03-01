@@ -35,8 +35,8 @@ jobs:
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          LINEAR_REF=$(echo "$ISSUE_BODY" | grep -oP '[A-Z]+-\d+' | head -1 || true)
-          LINEAR_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://linear\.app/[^\s\)]+' | head -1 || true)
+          LINEAR_REF=$(printf '%s\n' "$ISSUE_BODY" | grep -oP '[A-Z]+-\d+' | head -1 || true)
+          LINEAR_URL=$(printf '%s\n' "$ISSUE_BODY" | grep -oP 'https://linear\.app/[^\s\)]+' | head -1 || true)
           echo "ref=$LINEAR_REF" >> $GITHUB_OUTPUT
           echo "url=$LINEAR_URL" >> $GITHUB_OUTPUT
 
@@ -66,16 +66,17 @@ jobs:
             exit 0
           fi
 
-          ISSUE_NUM=$(echo "$LINEAR_REF" | grep -oP '\d+')
+          TEAM_KEY=$(printf '%s' "$LINEAR_REF" | grep -oP '^[A-Z]+')
+          ISSUE_NUM=$(printf '%s' "$LINEAR_REF" | grep -oP '\d+')
 
           # Find the issue UUID and team
           SEARCH=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$(jq -n --argjson num "$ISSUE_NUM" '{
+            -d "$(jq -n --argjson num "$ISSUE_NUM" --arg teamKey "$TEAM_KEY" '{
               query: "query($filter: IssueFilter) { issues(filter: $filter) { nodes { id identifier team { id } } } }",
-              variables: { filter: { number: { eq: $num } } }
-            }')" 2>&1) || {
+              variables: { filter: { number: { eq: $num }, team: { key: { eq: $teamKey } } } }
+            }')") || {
             warn_issue "Failed to connect to Linear API (network error or timeout). Will retry on next trigger."
             exit 0
           }
@@ -83,7 +84,8 @@ jobs:
           # Check for auth/API errors
           GQL_ERROR=$(echo "$SEARCH" | jq -r '.errors[0].message // empty' 2>/dev/null)
           if [ -n "$GQL_ERROR" ]; then
-            warn_issue "Linear API error: $GQL_ERROR"
+            echo "::error::Linear API error: $GQL_ERROR"
+            warn_issue "Linear API returned an error. Check the workflow logs for details."
             exit 0
           fi
 
@@ -101,7 +103,7 @@ jobs:
             -d "$(jq -n --arg teamId "$TEAM_ID" '{
               query: "query($teamId: String!) { team(id: $teamId) { states { nodes { id name type } } } }",
               variables: { teamId: $teamId }
-            }')" 2>&1) || {
+            }')") || {
             warn_issue "Failed to fetch workflow states from Linear."
             exit 0
           }
@@ -119,7 +121,7 @@ jobs:
             -d "$(jq -n --arg id "$ISSUE_UUID" --arg stateId "$IN_PROGRESS_ID" '{
               query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
               variables: { id: $id, input: { stateId: $stateId } }
-            }')" 2>&1) || {
+            }')") || {
             warn_issue "Failed to update Linear issue (network error)."
             exit 0
           }
@@ -129,7 +131,8 @@ jobs:
             echo "Moved $LINEAR_REF to In Progress"
           else
             UPD_ERROR=$(echo "$UPDATE" | jq -r '.errors[0].message // "unknown error"' 2>/dev/null)
-            warn_issue "Failed to move $LINEAR_REF to In Progress: $UPD_ERROR"
+            echo "::error::Failed to move $LINEAR_REF to In Progress: $UPD_ERROR"
+            warn_issue "Failed to move $LINEAR_REF to In Progress. Check the workflow logs for details."
           fi
 
       - name: Checkout
