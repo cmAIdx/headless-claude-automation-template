@@ -117,7 +117,14 @@ Agents operate autonomously within these boundaries:
 
 ### Progress Tracking
 
-Dev agents MUST update GitHub Issue checkboxes as they work. Update 3-5 times during implementation, not in a single batch at the end. This lets humans monitor progress in real time.
+**GitHub Issue checkboxes**: Dev agents MUST update checkboxes as they work. Update 3-5 times during implementation, not in a single batch at the end.
+
+**PR task lists**: After creating a PR, include a checklist of completed and remaining items in the PR body. Update before pushing final changes.
+
+**Linear status flow** (automated by workflows, not agents):
+- `Todo` → `In Progress`: when dev agent starts (claude-dev.yml)
+- `In Progress` → `In Review`: when PR is opened (linear-sync.yml)
+- `In Review` → `Done`: when PR is merged (linear-sync.yml)
 
 ### Commit Conventions
 

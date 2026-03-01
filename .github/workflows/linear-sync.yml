@@ -88,6 +88,45 @@ jobs:
             --repo ${{ github.repository }} \
             --body "Linear issue created: [$ISSUE_ID]($ISSUE_URL)"
 
+      - name: Move Linear issue to In Review
+        if: steps.check.outputs.found == 'true'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_REF: ${{ steps.check.outputs.ref }}
+        run: |
+          ISSUE_NUM=$(echo "$LINEAR_REF" | grep -oP '\d+')
+          SEARCH=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --argjson num "$ISSUE_NUM" '{
+              query: "query($filter: IssueFilter) { issues(filter: $filter) { nodes { id identifier team { id } } } }",
+              variables: { filter: { number: { eq: $num } } }
+            }')")
+          ISSUE_UUID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].id // empty')
+          TEAM_ID=$(echo "$SEARCH" | jq -r '.data.issues.nodes[0].team.id // empty')
+          if [ -z "$ISSUE_UUID" ]; then
+            echo "::warning::Could not find Linear issue for $LINEAR_REF"
+            exit 0
+          fi
+          STATES=$(curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg teamId "$TEAM_ID" '{
+              query: "query($teamId: String!) { team(id: $teamId) { states { nodes { id name type } } } }",
+              variables: { teamId: $teamId }
+            }')")
+          IN_REVIEW_ID=$(echo "$STATES" | jq -r '.data.team.states.nodes[] | select(.name == "In Review") | .id')
+          if [ -n "$IN_REVIEW_ID" ]; then
+            curl -s --max-time 10 -X POST https://api.linear.app/graphql \
+              -H "Authorization: $LINEAR_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg id "$ISSUE_UUID" --arg stateId "$IN_REVIEW_ID" '{
+                query: "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }",
+                variables: { id: $id, input: { stateId: $stateId } }
+              }')" > /dev/null
+            echo "Moved $LINEAR_REF to In Review"
+          fi
+
   pr-merged:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
