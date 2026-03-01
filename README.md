@@ -8,9 +8,9 @@ Using Claude Code as a pair programmer is productive, but the orchestration over
 
 The question that led to this template: does Claude actually need you sitting there?
 
-It doesn't. Claude runs headless in GitHub Actions runners the same way we've run headless browsers in CI for years. No IDE. No chat window. Just a process that starts, reads an issue, implements a feature, opens a PR, and shuts down. The agent is gone, but the PR is there -- with a full conversation log of every decision it made, every file it touched, every test it ran. It's more transparent than most human-written PRs.
+It doesn't. Claude runs headless in GitHub Actions runners the same way we've run headless browsers in CI for years. No IDE. No chat window. Just a process that starts, reads an issue, implements a feature, opens a PR, and shuts down. The agent is gone, but the PR is there - with a full conversation log of every decision it made, every file it touched, every test it ran. It's more transparent than most human-written PRs.
 
-This template contains the complete automation infrastructure -- GitHub Actions workflows, Claude Code configuration, Linear integration, and safety hooks -- extracted from a production pipeline and stripped of all project-specific code. Fork it, fill in your CLAUDE.md, and you have a working agent pipeline.
+This template contains the complete automation infrastructure - GitHub Actions workflows, Claude Code configuration, Linear integration, and safety hooks - extracted from a production pipeline and stripped of all project-specific code. Fork it, fill in your CLAUDE.md, and you have a working agent pipeline.
 
 ## What's in the box
 
@@ -148,21 +148,21 @@ See [SETUP.md](SETUP.md) for the full 9-step setup guide. See [docs/reference.md
 ## Links
 
 ### Template reference
-- [docs/reference.md](docs/reference.md) -- complete technical reference for this template (hooks, permissions, agent lifecycle, costs, failure modes)
+- [docs/reference.md](docs/reference.md) - complete technical reference for this template (hooks, permissions, agent lifecycle, costs, failure modes)
 
 ### Core tools
-- [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action) -- the GitHub Action that runs Claude Code headless in CI
+- [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action) - the GitHub Action that runs Claude Code headless in CI
 - [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code)
-- [Linear MCP server](https://linear.app/docs/mcp) -- how /pipeline creates stories
-- [CodeRabbit](https://www.coderabbit.ai/) -- optional automated code review (40+ linters)
+- [Linear MCP server](https://linear.app/docs/mcp) - how /pipeline creates stories
+- [CodeRabbit](https://www.coderabbit.ai/) - optional automated code review (40+ linters)
 
 ### Background reading
-- [Anthropic: Agentic Coding Trends 2026](https://resources.anthropic.com/2026-agentic-coding-trends-report) -- industry data on autonomous agents
-- [Anthropic: Claude Code Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) -- multi-agent patterns
-- [Autonomous Coding Quickstart](https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding) -- Anthropic's reference implementation
-- [Addy Osmani: AI Coding Workflow](https://addyosmani.com/blog/ai-coding-workflow/) -- spec-first approach from Google Chrome lead
+- [Anthropic: Agentic Coding Trends 2026](https://resources.anthropic.com/2026-agentic-coding-trends-report) - industry data on autonomous agents
+- [Anthropic: Claude Code Agent Teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) - multi-agent patterns
+- [Autonomous Coding Quickstart](https://github.com/anthropics/claude-quickstarts/tree/main/autonomous-coding) - Anthropic's reference implementation
+- [Addy Osmani: AI Coding Workflow](https://addyosmani.com/blog/ai-coding-workflow/) - spec-first approach from Google Chrome lead
 
 ### Alternative patterns
-- [Cyrus](https://www.atcyrus.com/) -- Linear-native agent (alternative to GitHub Actions approach)
-- [Devin](https://devin.ai/) -- fully managed autonomous agent
-- [GitHub Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent-to-work-on-tasks/about-assigning-tasks-to-copilot) -- GitHub's native agent
+- [Cyrus](https://www.atcyrus.com/) - Linear-native agent (alternative to GitHub Actions approach)
+- [Devin](https://devin.ai/) - fully managed autonomous agent
+- [GitHub Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent-to-work-on-tasks/about-assigning-tasks-to-copilot) - GitHub's native agent

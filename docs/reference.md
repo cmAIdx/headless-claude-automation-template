@@ -246,13 +246,13 @@ Two hooks are configured:
 - Output is shown to the user if the hook blocks
 
 Two types:
-- `"type": "command"` -- runs a shell command
-- `"type": "prompt"` -- sends an AI prompt (useful for semantic checks)
+- `"type": "command"` - runs a shell command
+- `"type": "prompt"` - sends an AI prompt (useful for semantic checks)
 
 ### PostToolUse Hooks
 
 - Run **after** the tool executes
-- **Cannot block** -- informational only
+- **Cannot block** - informational only
 - Useful for auto-formatting, notifications, or reminders
 
 This template uses PreToolUse hooks only. Add PostToolUse hooks in `settings.json` under the `"PostToolUse"` key for project-specific needs (e.g., auto-lint after file edits).
@@ -443,7 +443,7 @@ Run a linter after every file edit:
 
 ### Custom Skill
 
-Create `.claude/skills/your-skill/SKILL.md` with reference material that Claude loads when relevant. Skills are passive -- they provide context, not commands.
+Create `.claude/skills/your-skill/SKILL.md` with reference material that Claude loads when relevant. Skills are passive - they provide context, not commands.
 
 ### Custom Agent
 

@@ -26,5 +26,5 @@ Add email/password authentication so users can create accounts and log in. This 
 ## Constraints
 
 - Use the existing database connection (see CLAUDE.md for details)
-- No third-party auth providers -- just email/password for now
+- No third-party auth providers - just email/password for now
 - All form validation must happen both client-side and server-side

@@ -79,7 +79,7 @@ Configure GitHub branch protection on `main`:
 1. **Settings > Branches > Add rule** for `main`
 2. Enable **Require a pull request before merging**
 3. Enable **Require approvals** (set to 1)
-4. Enable **Require status checks to pass** -- add: `claude-review`
+4. Enable **Require status checks to pass** - add: `claude-review`
 5. (Optional) **Dismiss stale approvals when new commits are pushed**
 
 ## Step 8: CodeRabbit (Optional)
@@ -156,8 +156,8 @@ Linear issues auto-close with status "Done"
   hooks/
     block-destructive.sh  # Blocks dangerous commands (see script for full pattern list)
   commands/
-    pipeline.md           # /pipeline -- requirements -> Linear -> agents
-    review.md             # /review -- 3-iteration QC review
+    pipeline.md           # /pipeline - requirements -> Linear -> agents
+    review.md             # /review - 3-iteration QC review
   agents/
     security-reviewer.md  # Security review subagent
 

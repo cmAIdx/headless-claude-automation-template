@@ -57,15 +57,15 @@ After this step, continue with the normal pipeline flow. The starter code is now
 ### 1. Discover Linear Workspace
 
 Use the Linear MCP tools to get workspace context:
-- `list_teams` -- find the target team (ask user if multiple teams exist)
-- `list_issue_labels` -- find existing labels, note which ones to create
-- `list_projects` -- check for existing related projects
+- `list_teams` - find the target team (ask user if multiple teams exist)
+- `list_issue_labels` - find existing labels, note which ones to create
+- `list_projects` - check for existing related projects
 
 ### 2. Analyze Requirements
 
 - Parse the document into distinct features/changes
 - Identify dependencies between features
-- Flag anything that touches critical paths -- these need human review on the PR
+- Flag anything that touches critical paths - these need human review on the PR
 
 ### 3. Create Linear Hierarchy
 
@@ -100,7 +100,7 @@ Each story must be:
 
 ```markdown
 ## Context
-[Why this change is needed -- reference the requirements doc]
+[Why this change is needed - reference the requirements doc]
 
 ## Requirements
 - [ ] Requirement 1
@@ -159,7 +159,7 @@ After Linear issues are created, ensure matching GitHub Issues exist with the co
    gh issue create --title "TITLE" --label "story,agent:ready,priority:p1" --body "BODY"
    ```
 
-4. **Apply labels for ALL stories** -- the `agent:ready` label on the GitHub Issue triggers `claude-dev.yml`. Without it, no dev agent runs.
+4. **Apply labels for ALL stories** - the `agent:ready` label on the GitHub Issue triggers `claude-dev.yml`. Without it, no dev agent runs.
 
 **Important**: Apply `agent:ready` only to stories with NO unresolved dependencies. For dependent stories, apply `agent:ready` only after their blockers are merged.
 
@@ -173,4 +173,4 @@ And remind the user:
 - Dev agents trigger on `agent:ready` label
 - CodeRabbit + Claude review run on each PR
 - PRs on critical paths need manual approval
-- Track progress in Linear -- status updates sync back from GitHub
+- Track progress in Linear - status updates sync back from GitHub
