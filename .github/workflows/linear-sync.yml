@@ -68,7 +68,7 @@ jobs:
           GQL_ERROR=$(echo "$RESPONSE" | jq -r '.errors[0].message // empty' 2>/dev/null)
           if [ -n "$GQL_ERROR" ]; then
             echo "::error::Linear API error: $GQL_ERROR"
-            warn_pr "Linear API returned an error." "Check the workflow logs and verify LINEAR_API_KEY is valid."
+            warn_pr "Linear API returned an error." "Check the [workflow logs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) and verify LINEAR_API_KEY is valid."
             echo "id=" >> $GITHUB_OUTPUT
             echo "key=" >> $GITHUB_OUTPUT
             exit 0

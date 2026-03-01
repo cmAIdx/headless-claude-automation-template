@@ -69,7 +69,7 @@ jobs:
           TEAM_KEY=$(printf '%s' "$LINEAR_REF" | grep -oP '^[A-Z]+')
           ISSUE_NUM=$(printf '%s' "$LINEAR_REF" | grep -oP '\d+')
 
-          # Find the issue UUID and team
+          # Find the issue UUID and team (filter by both team key and number to avoid cross-team collisions)
           SEARCH=$(curl -sS --max-time 15 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
