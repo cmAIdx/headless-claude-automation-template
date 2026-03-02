@@ -37,15 +37,15 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           allowed_bots: "coderabbitai,claude"
-          claude_args: '--max-turns 10 --allowedTools "Bash(git diff:*),Bash(git log:*),Bash(git show:*)"'
+          claude_args: '--max-turns 15 --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*)"'
           prompt: |
             Review this PR. First, read CLAUDE.md to understand the project's architecture, conventions, and policies. Then check the diff against these criteria:
 
-            1. **Codebase compatibility**: Does the new code match the project's existing naming conventions, import patterns, code style, and architectural patterns? Read existing files in the same directories to compare.
-            2. **Code reuse**: Did the author reuse existing utilities, helpers, components, and abstractions? Search the codebase (use git grep) for similar functionality. Flag any case where the PR creates something that already exists.
+            1. **Codebase compatibility**: Does the new code match the project's existing naming conventions, import patterns, code style, and architectural patterns? Use Read to examine existing files in the same directories and compare.
+            2. **Code reuse**: Did the author reuse existing utilities, helpers, components, and abstractions? Use Grep to search the codebase for similar functionality. Flag any case where the PR creates something that already exists.
             3. **Security**: No exposed secrets, proper input validation, no injection vectors, no hardcoded credentials.
             4. **Architecture**: Follows existing patterns documented in CLAUDE.md. No unnecessary abstractions or over-engineering.
-            5. **Tests**: New features have tests. Changes don't break existing tests. Test coverage is adequate.
+            5. **Tests**: New features have tests. Verify test files exist and cover the key paths. Check test quality by reading the test code.
             6. **Tech debt**: Does this PR introduce new tech debt? Flag: TODO/FIXME/HACK comments, copy-pasted code, pattern violations, workarounds that bypass established conventions. Minor tech debt cleanup in touched files is expected and encouraged.
             7. **Code quality**: No dead code, no dead imports, no unnecessary complexity.
 
@@ -59,4 +59,9 @@ jobs:
             # If the PR touches src/lib/auth/ or src/lib/db/:
             # - Flag as REQUIRES HUMAN REVIEW in your summary
 
-            Post your review as a PR review comment. Use specific file:line references.
+            ## Important constraints
+
+            - You are a READ-ONLY reviewer. You can read files (Read, Glob, Grep) and inspect git history (git diff, git log, git show). That is all.
+            - Do NOT attempt to run tests, linters, or any Python/Node commands. You cannot execute code.
+            - Do NOT try to post your review via `gh` commands or write files. The action framework will post your review output automatically.
+            - Write your review findings as your final message. Use specific file:line references.

@@ -1,6 +1,6 @@
 # Agent Pipeline Template
 
-A reusable template for autonomous software delivery using headless Claude agents. Feed a requirements doc in, review pull requests out. Four human touchpoints.
+A reusable template for autonomous software delivery using headless Claude agents. Feed a requirements doc in, review pull requests out. Two human touchpoints.
 
 ## The problem this solves
 
@@ -111,7 +111,7 @@ The CLAUDE.md file in your repo is what ties it together. It gives every agent t
 - **Credential deny rules**: Blocks reading or editing `.env`, `.env.local`, `.env.production`.
 - **Bot-only fix trigger**: The fix agent only responds to bot review comments, not human ones. Prevents unintended fix loops.
 - **Concurrency groups**: Only one fix agent runs per PR at a time.
-- **Turn limits**: Dev agent capped at 40 turns, review at 10, fix at 15.
+- **Turn limits**: Dev agent capped at 40 turns, review at 15, fix at 15.
 
 ### When agents make mistakes
 

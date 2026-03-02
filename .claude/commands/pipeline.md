@@ -213,3 +213,106 @@ And remind the user:
 - PRs on critical paths need manual approval
 - Linear status updates are automatic: Todo → In Progress → In Review → Done
 - Track progress in both Linear (status) and GitHub (issue checkboxes + PR task lists)
+
+### 9. Monitor & Orchestrate
+
+After printing the summary, begin monitoring agent progress. This gives the user real-time visibility into the pipeline without switching to GitHub Actions, GitHub Issues, or Linear.
+
+**9a. Build tracking state**
+
+From the issues created in Steps 6-7, build an internal tracking list. For each story, track:
+- `gh_issue`: GitHub issue number
+- `linear_id`: Linear issue identifier (e.g., `VIT-12`)
+- `title`: story title
+- `depends_on`: list of GitHub issue numbers this story depends on
+- `status`: one of `waiting`, `queued`, `running`, `pr_open`, `merged`, `failed`
+- `progress`: checkbox ratio from the issue body (e.g., `3/5`)
+- `pr_number`: associated PR number (if any)
+- `run_url`: GitHub Actions run URL (if any)
+
+Initial status assignment:
+- Stories with no dependencies that already have `agent:ready` -> `queued`
+- Stories with unresolved dependencies -> `waiting`
+
+**9b. Polling loop**
+
+Print `Monitoring agent progress...` then repeat every 60 seconds:
+
+1. **Query workflow runs**:
+   ```bash
+   gh run list --workflow "Claude Dev Agent" --limit 20 --json databaseId,status,conclusion,displayTitle,url
+   ```
+   Match runs to stories by issue number in the run's display title.
+
+2. **Query each issue for checkbox progress**:
+   ```bash
+   gh issue view <N> --json body
+   ```
+   Count `- [x]` vs `- [ ]` checkboxes to compute progress (e.g., `3/5`).
+
+3. **Search for associated PRs**:
+   ```bash
+   gh pr list --state all --search "Closes #<N>" --json number,state,url,mergedAt
+   ```
+
+4. **Check Linear status**: Use `get_issue` MCP tool for each story's Linear ID.
+
+5. **Update statuses** based on collected data:
+   - Run in progress -> `running`
+   - Run completed successfully + PR open -> `pr_open`
+   - PR merged -> `merged`
+   - Run failed / PR closed without merge -> `failed`
+
+6. **Print status table**:
+   ```
+   === Pipeline Status (HH:MM:SS) ===
+   | # | Story              | Agent   | Progress | PR         | Linear      |
+   |---|--------------------|---------|----------|------------|-------------|
+   | 1 | Add auth endpoints | running | 3/5      | -          | In Progress |
+   | 2 | Add login form     | merged  | 5/5      | #12 merged | Done        |
+   Elapsed: 12m 34s | Active: 1 | PRs open: 0 | Merged: 1 | Failed: 0
+   ```
+
+7. **Trigger dependent stories**: For each `waiting` story, check if ALL issues in its `depends_on` list are `merged`. If so:
+   ```bash
+   gh issue edit <N> --add-label "agent:ready"
+   ```
+   Print `Unblocked story #<N>: <title>` and set its status to `queued`.
+
+8. **Sleep**: `sleep 60` before the next iteration.
+
+**9c. Completion detection**
+
+Exit the polling loop when either:
+- Every story has reached a terminal status (`merged` or `failed`), OR
+- No stories are `running` and no status has changed for 5 consecutive iterations (stall detection)
+
+**9d. Final summary**
+
+On exit, print a final report:
+```
+=== Pipeline Complete ===
+Merged: N stories
+Failed: M stories
+```
+
+If any stories failed, list each with its GitHub Actions run URL:
+```
+Failed stories:
+  #3 - Add notification service -> https://github.com/.../actions/runs/12345
+```
+
+If any stories are still `waiting` (blocked by a failed dependency), warn:
+```
+Blocked stories (dependency failed):
+  #5 - Add email templates (blocked by #3)
+```
+
+List any open PRs that need human review.
+
+**9e. Failure handling**
+
+- Do NOT retry failed agents -- surface the failure and let the user decide.
+- Do NOT unblock stories that depend on failed stories -- they remain `waiting` and are listed in the final summary.
+- Always include the GitHub Actions run URL for failed stories so the user can inspect logs.
+- If a story's dependency has failed, print a warning when that dependency fails (not just at the end).
