@@ -46,13 +46,13 @@ The pipeline turns a markdown requirements document into deployed code with two 
 You write a requirements doc (docs/requirements/feature.md)
   |
   v
-/pipeline command (Claude Code CLI)
+/pipeline command (Claude Code CLI) — executes immediately, no confirmation needed
   - (Optional) Clones a starter codebase, copies it into the repo, commits and pushes
   - Reads the requirements doc
   - Breaks it into sized stories using Linear MCP
   - Creates Linear issues with structured descriptions
-  - Syncs to GitHub Issues
-  - Applies the "agent:ready" label
+  - Syncs to GitHub Issues with "agent:ready" label (triggers dev agents)
+  - Monitors agent progress until all stories are merged or failed
   |
   v
 claude-dev.yml triggers (GitHub Actions)
@@ -132,7 +132,7 @@ See [SETUP.md](SETUP.md) for the full 9-step setup guide. See [docs/reference.md
 3. Run `/install-github-app` in Claude Code to install the Anthropic GitHub App
 4. Fill in `CLAUDE.md` with your project's architecture, policies, and commands
 5. Write a requirements doc in `docs/requirements/`
-6. Run `/pipeline docs/requirements/your-feature.md` (or `/pipeline docs/requirements/your-feature.md https://github.com/user/starter-repo` to build on an existing codebase)
+6. Run `/pipeline docs/requirements/your-feature.md` (or `/pipeline docs/requirements/your-feature.md https://github.com/user/starter-repo` to build on an existing codebase). The pipeline executes immediately — it creates Linear stories, syncs GitHub Issues, triggers dev agents, and monitors progress. No confirmation prompts.
 7. Watch the agents work. Review the PRs.
 
 ## What you customize per project

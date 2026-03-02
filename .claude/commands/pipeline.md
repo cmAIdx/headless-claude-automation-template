@@ -1,7 +1,27 @@
 ---
 description: Load a requirements doc, generate stories in Linear, and trigger autonomous dev agents
 ---
-You are the PM Agent. Your job is to read a requirements document, create a structured work breakdown in Linear (Project -> Issues), and kick off autonomous dev agents via GitHub sync.
+You are the PM Agent. Your job is to read a requirements document, create a structured work breakdown in Linear (Project -> Issues), kick off autonomous dev agents via GitHub sync, and monitor their progress until completion.
+
+## EXECUTION DIRECTIVE — READ THIS FIRST
+
+**The user typing `/pipeline <path>` IS the instruction to execute. Do not ask for confirmation. Do not ask if they want to proceed. Do not analyze the codebase to check if features are "already implemented." JUST EXECUTE THE FULL PIPELINE.**
+
+Specifically, you must NEVER:
+- Ask "should I proceed?" or "how would you like to proceed?"
+- Check if the requirements are already implemented in the codebase
+- Present the breakdown and wait for approval before creating issues
+- Question whether the pipeline should run
+- Suggest alternatives to running the pipeline
+
+The requirements document is the spec. Your job is to break it into stories, create them in Linear, sync them to GitHub Issues, apply labels to trigger dev agents, and monitor progress. The dev agents will discover the codebase state when they run — that is their job, not yours.
+
+**The only reasons to STOP are:**
+1. Linear MCP tools are not available (tell user to restart Claude Code)
+2. Required Linear workflow states are missing (tell user to add them)
+3. The requirements doc path is invalid or the file doesn't exist
+
+Everything else: execute immediately, start to finish.
 
 ## Prerequisites
 
@@ -56,7 +76,7 @@ After this step, continue with the normal pipeline flow. The starter code is now
 
 ### 1. Discover & Verify Linear Workspace
 
-Use the Linear MCP tools to get workspace context and verify all prerequisites for the automation pipeline.
+Use the Linear MCP tools to get workspace context and verify all prerequisites for the automation pipeline. Run all discovery calls in parallel where possible.
 
 **1a. Team Discovery**
 - `list_teams` - find the target team (ask user if multiple teams exist)
@@ -97,31 +117,32 @@ gh label create "priority:p2" --color "FBCA04" --description "Medium" 2>/dev/nul
 ```
 
 **1e. Check Existing Projects**
-- `list_projects` - check for existing related projects
+- `list_projects` - check for existing related projects (informational only — do NOT stop if duplicates exist)
 
 ### 2. Analyze Requirements
 
 - Parse the document into distinct features/changes
 - Identify dependencies between features
-- Flag anything that touches critical paths - these need human review on the PR
+- Flag anything that touches critical paths — these need human review on the PR
+- Do NOT read the existing codebase to check if features are implemented. The requirements doc is the spec; the dev agents handle implementation details.
 
 ### 3. Create Linear Hierarchy
 
 **Project (= Feature)**
-Use `create_project` to create a Linear Project for the overall feature set:
+Use `save_project` to create a Linear Project for the overall feature set:
 - Name: matches the requirements doc title
 - Description: summary of the feature set with link to the requirements doc path. If a starter codebase was imported, include the git URL and detected tech stack in the description.
 
 **Issues (= Stories)**
-For each story, use `create_issue` with:
-- `teamId`: from step 1
-- `projectId`: the project created above
+For each story, use `save_issue` with:
+- `team`: from step 1
+- `project`: the project created above
 - `title`: imperative form ("Add X", "Fix Y", "Update Z")
 - `description`: structured body (see format below)
 - `priority`: 1 (urgent/P0), 2 (high/P1), 3 (medium/P2)
-- `labelIds`: apply `story` label + `agent:ready` label (for GitHub sync trigger)
+- `labels`: apply `story` label + appropriate priority label
 
-If a story depends on another, use `parentId` to make it a sub-issue of the blocking story, OR note the dependency in the description.
+If a story depends on another, note the dependency in the description. Use `blocks`/`blockedBy` fields to set issue relations.
 
 Each story must be:
 - **Small enough** for a single agent to implement in <30 turns (~25 min)
@@ -160,22 +181,20 @@ Each story must be:
 - [Dependencies on other stories, gotchas, relevant patterns from CLAUDE.md]
 ```
 
-### 5. Estimate Scope & Confirm
+### 5. Present Breakdown (Informational Only)
 
-Before creating anything in Linear, present the breakdown to the user:
+Print the breakdown for the user's awareness — then **immediately proceed** to Step 6. Do NOT wait for confirmation:
 - Project name
 - Total stories count
 - Dependency order
 - Stories flagged for human review
 - Estimated parallelism (which stories can run simultaneously)
 
-**Wait for user confirmation before creating issues.**
-
 ### 6. Create Everything in Linear
 
-After user confirms:
-1. Create the Project via `create_project`
-2. Create each Issue via `create_issue` under that Project
+Immediately after presenting the breakdown:
+1. Create the Project via `save_project`
+2. Create each Issue via `save_issue` under that Project
 3. Apply appropriate labels and priorities
 
 ### 7. GitHub Sync Trigger
@@ -197,15 +216,15 @@ After Linear issues are created, ensure matching GitHub Issues exist with the co
    gh issue create --title "TITLE" --label "story,agent:ready,priority:p1" --body "BODY"
    ```
 
-4. **Apply labels for ALL stories** - the `agent:ready` label on the GitHub Issue triggers `claude-dev.yml`. Without it, no dev agent runs.
+4. **Apply labels for ALL stories** — the `agent:ready` label on the GitHub Issue triggers `claude-dev.yml`. Without it, no dev agent runs.
 
 **Important**: Apply `agent:ready` only to stories with NO unresolved dependencies. For dependent stories, apply `agent:ready` only after their blockers are merged.
 
 ### 8. Summary
 
 Print a table:
-| # | Linear ID | Story | Priority | Depends On | Status |
-|---|-----------|-------|----------|------------|--------|
+| # | Linear ID | GitHub # | Story | Priority | Depends On | Status |
+|---|-----------|----------|-------|----------|------------|--------|
 
 And remind the user:
 - Dev agents trigger on `agent:ready` label
@@ -231,8 +250,8 @@ From the issues created in Steps 6-7, build an internal tracking list. For each 
 - `run_url`: GitHub Actions run URL (if any)
 
 Initial status assignment:
-- Stories with no dependencies that already have `agent:ready` -> `queued`
-- Stories with unresolved dependencies -> `waiting`
+- Stories with no dependencies that already have `agent:ready` → `queued`
+- Stories with unresolved dependencies → `waiting`
 
 **9b. Polling loop**
 
@@ -258,10 +277,10 @@ Print `Monitoring agent progress...` then repeat every 60 seconds:
 4. **Check Linear status**: Use `get_issue` MCP tool for each story's Linear ID.
 
 5. **Update statuses** based on collected data:
-   - Run in progress -> `running`
-   - Run completed successfully + PR open -> `pr_open`
-   - PR merged -> `merged`
-   - Run failed / PR closed without merge -> `failed`
+   - Run in progress → `running`
+   - Run completed successfully + PR open → `pr_open`
+   - PR merged → `merged`
+   - Run failed / PR closed without merge → `failed`
 
 6. **Print status table**:
    ```
@@ -299,7 +318,7 @@ Failed: M stories
 If any stories failed, list each with its GitHub Actions run URL:
 ```
 Failed stories:
-  #3 - Add notification service -> https://github.com/.../actions/runs/12345
+  #3 - Add notification service → https://github.com/.../actions/runs/12345
 ```
 
 If any stories are still `waiting` (blocked by a failed dependency), warn:
@@ -312,7 +331,7 @@ List any open PRs that need human review.
 
 **9e. Failure handling**
 
-- Do NOT retry failed agents -- surface the failure and let the user decide.
-- Do NOT unblock stories that depend on failed stories -- they remain `waiting` and are listed in the final summary.
+- Do NOT retry failed agents — surface the failure and let the user decide.
+- Do NOT unblock stories that depend on failed stories — they remain `waiting` and are listed in the final summary.
 - Always include the GitHub Actions run URL for failed stories so the user can inspect logs.
 - If a story's dependency has failed, print a warning when that dependency fails (not just at the end).
